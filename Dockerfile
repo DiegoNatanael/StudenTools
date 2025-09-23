@@ -1,5 +1,5 @@
-# Use a slim Python base image for smaller size
-FROM python:3.9-slim-buster
+# Use a more recent Python base image (Debian Bullseye)
+FROM python:3.9-slim-bullseye # <-- CHANGED FROM -buster TO -bullseye
 
 # Install Graphviz - This is the critical step for the 'dot' command!
 # Update apt-get, install graphviz, and clean up apt cache
@@ -16,7 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose the port your FastAPI application will listen on
-# Render typically listens on port 10000, but 8000 is common for uvicorn
 EXPOSE 8000
 
 # Command to run your FastAPI application with Uvicorn
