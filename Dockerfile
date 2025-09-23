@@ -1,5 +1,5 @@
 # Use a more recent Python base image (Debian Bullseye)
-FROM python:3.9-slim-bullseye # <-- CHANGED FROM -buster TO -bullseye
+FROM python:3.9-slim-bullseye
 
 # Install Graphviz - This is the critical step for the 'dot' command!
 # Update apt-get, install graphviz, and clean up apt cache
