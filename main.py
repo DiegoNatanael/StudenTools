@@ -6,52 +6,74 @@ from pydantic import BaseModel, Field
 import json
 from typing import List, Optional
 
-# Import your diagram generation functions
+# Import your generator functions
 from diagram_generator import generate_graphviz_dot, render_diagram_to_bytes
+from doc_generator import create_document_docx # New import
+from ppt_generator import create_presentation_pptx # New import
 
-app = FastAPI(title="Graphviz Diagram Generator Backend")
+app = FastAPI(title="StudenTools Backend Services")
 
-# --- Pydantic Models for Input Data (Based on your parsed_data structure) ---
+# --- Diagram Generator Models (from previous steps) ---
 class NodeModel(BaseModel):
     id: str
     name: str
-    type: str # e.g., "server", "branch", "headquarters", "db_management", "database"
-    has_local_db: Optional[bool] = False # Not all nodes will have this
+    type: str
+    has_local_db: Optional[bool] = False
 
 class ConnectionModel(BaseModel):
     source_id: str
     target_id: str
     label: str
-    type: str # e.g., "network", "local_db_access", "management_link"
-    direction: str # "unidirectional" or "bidirectional"
+    type: str
+    direction: str
 
 class DiagramData(BaseModel):
     company_name: str
     nodes: List[NodeModel]
     connections: List[ConnectionModel]
     general_network_description: str
-    #replication_details: Optional[dict] = {} # Can add if needed later
-    #style_notes: Optional[str] = "" # Can add if needed later
 
-# --- Endpoint to Generate Diagram ---
-@app.post("/generate-diagram/", response_class=Response)
-async def generate_diagram(data: DiagramData):
+# --- DOCX Generator Models ---
+class DocxTableDataRow(BaseModel):
+    # Flexible table row, can be a list of strings/numbers
+    # For simplicity, assuming a fixed 3 columns as per example
+    col1: str
+    col2: str
+    col3: str
+
+class DocxData(BaseModel):
+    title: str = "Documento Generado"
+    introduction: str = "Este es un documento de ejemplo generado por StudenTools."
+    bullet_points: List[str] = ["Punto A", "Punto B", "Punto C"]
+    table_rows: List[DocxTableDataRow] = [] # List of Pydantic models for table rows
+
+# --- PPTX Generator Models ---
+class PptxData(BaseModel):
+    title: str = "Presentación Generada"
+    subtitle: str = "Un ejemplo de pptx con StudenTools"
+    agenda_items: List[str] = ["Introducción", "Contenido", "Conclusión"]
+    features_items: List[str] = ["Feature 1", "Feature 2"]
+
+# --- API Endpoints ---
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to StudenTools Backend! Use /docs for API documentation."}
+
+# Diagram Generator Endpoint
+@app.post("/generate-diagram/", response_class=Response, summary="Generate Graphviz Diagram")
+async def generate_diagram_endpoint(data: DiagramData):
     """
-    Receives diagram data in JSON format, generates a Graphviz diagram (PNG),
+    Receives diagram data in JSON, generates a Graphviz diagram (PNG),
     and returns the image bytes.
     """
     try:
-        # Convert Pydantic model to a plain dictionary for diagram_generator
         diagram_data_dict = data.dict()
-
         dot_script = generate_graphviz_dot(diagram_data_dict)
         image_bytes = render_diagram_to_bytes(dot_script, format="png")
-
         return Response(content=image_bytes, media_type="image/png")
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=500, detail="Graphviz 'dot' command not found on server."
-        )
+        raise HTTPException(status_code=500, detail="Graphviz 'dot' command not found on server.")
     except subprocess.CalledProcessError as e:
         raise HTTPException(
             status_code=500,
@@ -60,39 +82,77 @@ async def generate_diagram(data: DiagramData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
-# --- Example of how to structure the input data for testing ---
-@app.get("/example-diagram-data")
-async def get_example_diagram_data():
+# DOCX Generator Endpoint
+@app.post("/generate-docx/", response_class=Response, summary="Generate Word Document (.docx)")
+async def generate_docx_endpoint(data: DocxData):
     """
-    Returns an example JSON structure for diagram generation,
-    based on the original image's layout.
+    Receives data in JSON, generates a .docx document,
+    and returns the document bytes.
     """
-    example_data = {
-      "company_name": "Arquitectura de Sucursales Distribuidas",
-      "nodes": [
-        { "id": "Servidor_Central", "name": "Servidor", "type": "server" },
-        { "id": "Sinaloa_Branch", "name": "Sinaloa", "type": "branch" },
-        { "id": "Baja_California_Sur_Branch", "name": "Baja California Sur", "type": "branch" },
-        { "id": "Veracruz_Branch", "name": "Veracruz", "type": "branch" },
-        { "id": "Yucatan_HQ", "name": "Yucatán", "type": "headquarters" },
-        { "id": "Gestion_BD_Yucatan", "name": "Gestión de las BD", "type": "db_management" },
-        { "id": "BD_Sinaloa", "name": "BD", "type": "database" },
-        { "id": "BD_BCS", "name": "BD", "type": "database" },
-        { "id": "BD_Veracruz", "name": "BD", "type": "database" },
-        { "id": "BD_Yucatan", "name": "BD", "type": "database" }
-      ],
-      "connections": [
-        { "source_id": "Servidor_Central", "target_id": "Sinaloa_Branch", "label": "IP", "type": "network", "direction": "unidirectional" },
-        { "source_id": "Servidor_Central", "target_id": "Baja_California_Sur_Branch", "label": "IP", "type": "network", "direction": "unidirectional" },
-        { "source_id": "Servidor_Central", "target_id": "Veracruz_Branch", "label": "IP", "type": "network", "direction": "unidirectional" },
-        { "source_id": "Servidor_Central", "target_id": "Yucatan_HQ", "label": "IP", "type": "network", "direction": "unidirectional" },
+    try:
+        # Convert table_rows Pydantic models to list of lists for doc_generator
+        table_rows_list = [[row.col1, row.col2, row.col3] for row in data.table_rows]
 
-        { "source_id": "Sinaloa_Branch", "target_id": "BD_Sinaloa", "label": "", "type": "local_db_access", "direction": "unidirectional" },
-        { "source_id": "Baja_California_Sur_Branch", "target_id": "BD_BCS", "label": "", "type": "local_db_access", "direction": "unidirectional" },
-        { "source_id": "Veracruz_Branch", "target_id": "BD_Veracruz", "label": "", "type": "local_db_access", "direction": "unidirectional" },
-        { "source_id": "Yucatan_HQ", "target_id": "BD_Yucatan", "label": "", "type": "local_db_access", "direction": "unidirectional" },
-        { "source_id": "Yucatan_HQ", "target_id": "Gestion_BD_Yucatan", "label": "", "type": "management_link", "direction": "unidirectional" }
-      ],
-      "general_network_description": "Las bases de datos son homogéneas y utilizan fragmentación de datos. La sede principal (Yucatán) puede acceder a las BD de las sucursales vía IP, y usuarios con permisos de vista pueden consultar la información almacenada."
-    }
-    return example_data
+        docx_bytes = create_document_docx(
+            title_text=data.title,
+            intro_text=data.introduction,
+            items=data.bullet_points,
+            table_data=table_rows_list
+        )
+        # Set Content-Disposition header to suggest a filename
+        headers = {
+            "Content-Disposition": "attachment; filename=generated_document.docx"
+        }
+        return Response(content=docx_bytes, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document", headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating DOCX: {e}")
+
+# PPTX Generator Endpoint
+@app.post("/generate-pptx/", response_class=Response, summary="Generate PowerPoint Presentation (.pptx)")
+async def generate_pptx_endpoint(data: PptxData):
+    """
+    Receives data in JSON, generates a .pptx presentation,
+    and returns the presentation bytes.
+    """
+    try:
+        pptx_bytes = create_presentation_pptx(
+            title_text=data.title,
+            subtitle_text=data.subtitle,
+            agenda_items=data.agenda_items,
+            features_items=data.features_items
+        )
+        headers = {
+            "Content-Disposition": "attachment; filename=generated_presentation.pptx"
+        }
+        return Response(content=pptx_bytes, media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation", headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating PPTX: {e}")
+
+# --- Example of how to structure the input data for testing DOCX ---
+@app.get("/example-docx-data")
+async def get_example_docx_data():
+    """
+    Returns an example JSON structure for DOCX generation.
+    """
+    return DocxData(
+        title="Mi Documento Personalizado",
+        introduction="Aquí va la introducción personalizada del documento, que puede ser más larga.",
+        bullet_points=["Punto de interés uno", "Otro punto importante", "Un tercer detalle relevante"],
+        table_rows=[
+            DocxTableDataRow(col1="Dato 1", col2="Valor X", col3="Nota"),
+            DocxTableDataRow(col1="Dato 2", col2="Valor Y", col3="Detalle")
+        ]
+    )
+
+# --- Example of how to structure the input data for testing PPTX ---
+@app.get("/example-pptx-data")
+async def get_example_pptx_data():
+    """
+    Returns an example JSON structure for PPTX generation.
+    """
+    return PptxData(
+        title="Mi Presentación Dinámica",
+        subtitle="Un subtítulo creativo para mi proyecto",
+        agenda_items=["Primer Tema", "Segundo Tema", "Tercer Tema con Más Info"],
+        features_items=["Función A", "Función B", "Función C, la mejor de todas"]
+    )
